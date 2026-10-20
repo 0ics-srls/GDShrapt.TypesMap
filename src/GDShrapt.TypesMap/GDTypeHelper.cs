@@ -20,35 +20,28 @@ namespace GDShrapt.TypesMap
 
         private static bool TryParseJsonFromManifest<T>(string fileName, out T? values) where T : class
         {
-            var data = ReadManifestFile(fileName);
+            using var stream = OpenManifestFile(fileName);
 
-            if (data == null)
+            if (stream == null)
             {
                 values = null;
                 return false;
             }
 
+            // Deserialize straight from the embedded UTF-8 resource: reading it into a string first made a UTF-16
+            // copy of the 38 MB AssemblyData.json (plus StringBuilder growth) and was most of the load time.
             // Use case-insensitive deserialization to correctly map camelCase JSON to PascalCase C# properties
-            values = JsonSerializer.Deserialize<T?>(data, CaseInsensitiveJsonOptions);
+            values = JsonSerializer.Deserialize<T?>(stream, CaseInsensitiveJsonOptions);
             return values != null;
         }
 
-        private static string? ReadManifestFile(string name)
+        private static Stream? OpenManifestFile(string name)
         {
             var assembly = typeof(GDTypeHelper).Assembly;
 
             try
             {
-                var stream = assembly.GetManifestResourceStream($"GDShrapt.TypesMap.Files.{name}");
-
-                if (stream == null)
-                    return null;
-
-                using (stream)
-                {
-                    var reader = new StreamReader(stream);
-                    return reader.ReadToEnd();
-                }
+                return assembly.GetManifestResourceStream($"GDShrapt.TypesMap.Files.{name}");
             }
             catch (Exception) when (IsIOException())
             {
